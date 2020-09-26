@@ -33,13 +33,34 @@ class RpcClient:
     def __init__(self, server_addr):
         self._comm = Communicator('client')
         # Your implementation
+        self.server_addr = server_addr
         pass
 
     def call(self, func, *args):
         """Call function on RPC server and return result"""
-        
+
         # Your implementation
-        pass
+        import random
+        unique_id = random.random()
+        if func in ['get', 'put']:  # idempotent
+            while True:
+                self._comm.send(Message(message_type=func, body=args, headers=unique_id, sender=self._comm.addr),
+                                self.server_addr)
+                ans = self._comm.recv(0.5)
+                if ans:
+                    if ans._type == 'ERROR':
+                        raise RuntimeError(ans._body)
+                    return ans._body
+        else:
+            self._comm.send(Message(message_type=func, body=args, headers=unique_id, sender=self._comm.addr),
+                            self.server_addr)
+            ans = self._comm.recv(0.5)
+            if ans:
+                if ans._type == 'ERROR':
+                    raise RuntimeError(ans._body)
+                return ans._body
+            else:
+                raise RuntimeError('Response timeout')
 
 
 class User:
@@ -49,7 +70,7 @@ class User:
         self._proxy = proxy
         # reuse communicator from proxy
         self._comm = proxy._client._comm
-    
+
     def run(self):
         while True:
             msg = self._comm.recv()
@@ -86,7 +107,7 @@ class User:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-s', dest='server_addr', metavar='host:port', 
+    parser.add_argument('-s', dest='server_addr', metavar='host:port',
                         help='server address', default='127.0.0.1:9701')
     parser.add_argument('-d', dest='log_level', action='store_const', const=logging.DEBUG,
                         help='print debugging info', default=logging.WARNING)

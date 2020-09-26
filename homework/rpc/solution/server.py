@@ -46,13 +46,27 @@ class RpcServer:
 
     def __init__(self, addr, service):
         # Your implementation
+        self.service = service
+        self._comm = Communicator('server', addr)
         pass
 
     def run(self):
         """Main server loop where it handles incoming RPC requests"""
 
         # Your implementation
-        pass
+        processed_requests = set()
+        while True:
+            message = self._comm.recv()
+            if message and hasattr(message, '_headers') and getattr(message, '_headers') not in processed_requests:
+                processed_requests.add(getattr(message, '_headers'))
+                try:
+                    self._comm.send(
+                        Message(message_type='RESULT',
+                                body=getattr(self.service, getattr(message, '_type'))(*getattr(message, '_body'))),
+                        getattr(message, '_sender')
+                    )
+                except Exception as e:
+                    self._comm.send(Message(message_type='ERROR', body=str(e)), getattr(message, '_sender'))
 
 
 def main():
